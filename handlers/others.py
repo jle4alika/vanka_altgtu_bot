@@ -1,8 +1,8 @@
 import asyncio
 
 from aiogram import Router, Bot, F
-from aiogram.types import Message, CallbackQuery, Document, File, ContentType
-from aiogram.filters.command import CommandStart
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters.command import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 import database.requests.get as get
 import database.requests.add as add
@@ -46,7 +46,7 @@ async def resolve_username_to_user_id(username: str) -> int | None:
 
 
 class Reg(StatesGroup):
-    name = State()
+    faculty = State()
     group = State()
 
 class Settings(StatesGroup):
@@ -55,6 +55,25 @@ class Settings(StatesGroup):
     homework_add_and_edit = State()
     new_headman = State()
     mail = State()
+
+
+@router.message(Command('donate'))
+async def donate(message: Message):
+    await message.answer('<b>💖 Поддержите автора @jle4alika! 💖</b>'
+                         '\n\nЕсли вам нравится то, что я делаю, и вы хотите помочь мне продолжать создавать качественный контент, вы можете сделать пожертвование! Ваша поддержка очень важна для меня и поможет развиваться, вдохновляться новыми идеями и радовать вас свежими материалами.'
+                         '\n\n<b>🌟 Как сделать пожертвование:</b>'
+                         '\n\n1. Нажмите на кнопку "Пожертвовать" ниже.'
+                         '\n\n2. Выберите сумму, которую хотите внести.'
+                         '\n\n3. Следуйте инструкциям для завершения транзакции.'
+                         '\n\nКаждый вклад, независимо от размера, имеет значение и помогает мне двигаться вперед. Спасибо за вашу поддержку!'
+                         '\n\n🙏<b> Ваши пожертвования помогут мне:</b>'
+                         '\n\n• Создавать больше уникального контента'
+                         '\n\n• Улучшать качество дизайна бота'
+                         '\n\n• Реализовывать новые идеи и проекты'
+                         '\n\n• Оплачивать хостинг данного бота'
+                         '\n\nСпасибо, что вы со мной! ❤️',
+                         reply_markup=kb.donate,
+                         parse_mode=ParseMode.HTML)
 
 @router.message(CommandStart())
 async def start(message: Message, bot: Bot):
@@ -97,6 +116,13 @@ async def student(callback: CallbackQuery):
         'Чтобы получить доступ к группе, пожалуйста, <b>свяжись со старостой</b> и попроси у него ссылку или отсканируй QR-код. 📲'
         '\n\nУдачи в учебе! 🍀',
         parse_mode=ParseMode.HTML)
+    await asyncio.sleep(1)
+    await callback.message.answer('🌟<b> Не забудьте подписаться на наш канал с новостями! </b>🌟'
+                                  '\n\nЧтобы всегда быть в курсе последних обновлений и новостей о нашем боте, подписывайтесь на наш канал: @vankavstankaaltgtunews (https://t.me/vankavstanka_altgtu_news).'
+                                  '\n\nБудьте первыми, кто узнает о новых функциях и улучшениях! 🚀'
+                                  '\n\nСпасибо, что вы с нами! ❤️',
+                                  parse_mode=ParseMode.HTML,
+                                  reply_markup=kb.news)
 
 @router.callback_query(F.data == 'headman')
 async def headman(callback: CallbackQuery):
@@ -127,7 +153,13 @@ async def headman(callback: CallbackQuery):
 
 @router.callback_query(F.data == 'new_group')
 async def new_group(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer('📝 Введите название группы здесь:')
+    await callback.message.answer('📝 Введите факультет здесь:')
+    await state.set_state(Reg.faculty)
+
+@router.message(Reg.faculty)
+async def faculty(message: Message, state: FSMContext):
+    await state.update_data(faculty=message.text)
+    await message.answer('📝 Введите название группы здесь:')
     await state.set_state(Reg.group)
 
 
@@ -138,11 +170,11 @@ async def group(message: Message, state: FSMContext):
         if title == message.text:
             counter += 1
     if counter == 0:
-        await state.update_data(name=message.text)
-        data = message.text
-        await message.answer(f'Вы создали группу {data} ✨', reply_markup=kbr.main)
+        await state.update_data(group=message.text)
+        data = await state.get_data()
+        await message.answer(f'Вы создали группу {data["group"]} ✨', reply_markup=kbr.main)
         await state.clear()
-        await set.set_group(message.from_user.id, data)
+        await set.set_group(message.from_user.id, data["group"], data["faculty"])
         await set.set_user_group(message.from_user.id, message.from_user.id)
         await add.add_group_member(message.from_user.id)
         await asyncio.sleep(1)
@@ -161,6 +193,14 @@ async def group(message: Message, state: FSMContext):
                                             f'\n\n🔗 Ссылка для вступления:\n{link}'
                                             f'\n\nЕсли у тебя возникнут вопросы или понадобится помощь, дай знать!'
                                             f'\n\nСпасибо за твою работу! 💪')
+
+        await asyncio.sleep(1)
+        await message.answer('🌟<b> Не забудьте подписаться на наш канал с новостями! </b>🌟'
+                             '\n\nЧтобы всегда быть в курсе последних обновлений и новостей о нашем боте, подписывайтесь на наш канал: @vankavstankaaltgtunews (https://t.me/vankavstanka_altgtu_news).'
+                             '\n\nБудьте первыми, кто узнает о новых функциях и улучшениях! 🚀'
+                             '\n\nСпасибо, что вы с нами! ❤️',
+                             parse_mode=ParseMode.HTML,
+                             reply_markup=kb.news)
     else:
         await message.answer('Данная группа уже зарегестрированна.\nВведите другое название группы, либо обратитесь к старосте.')
 
@@ -171,34 +211,30 @@ async def settings(message: Message):
 
     if headman:
         await message.answer('Добро пожаловать в Настройки ⚙️! \n'
-                             'Как вы видите, вы можете передать права старосты, поменять домашнее задание и сделать рассылку свои одногруппникам \n'
-                             'и изменить свою группу',
+                             'Как вы видите, вы можете передать права старосты, поменять домашнее задание и сделать рассылку свои одногруппникам и загрузить расписание',
                              reply_markup=kb.headman_settings)
-    else:
-        await message.answer('Добро пожаловать в Настройки ⚙️! \n'
-                             'Как вы видите, вы можете изменить свою группу)',
-                             reply_markup=kb.user_settings)
 
 
-@router.callback_query(F.data  == 'upload_schedule')
-async def upload_schedule(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer('Отправиьте файл в формате <ins>ics</ins>\n\n'
-                                  'ЛК -> Расписание студента -> Дополнительно (в правом углу) ->\n'
-                                  'Экспорт расписания в ics', parse_mode=ParseMode.HTML)
-    await state.set_state(Settings.schedule)
+
+# @router.callback_query(F.data  == 'upload_schedule')
+# async def upload_schedule(callback: CallbackQuery, state: FSMContext):
+#     await callback.message.answer('Отправиьте файл в формате <ins>ics</ins>\n\n'
+#                                   'ЛК -> Расписание студента -> Дополнительно (в правом углу) ->\n'
+#                                   'Экспорт расписания в ics', parse_mode=ParseMode.HTML)
+#     await state.set_state(Settings.schedule)
 
 
-@router.message(Settings.schedule)
-async def schedule_download(message: Message, bot: Bot, state: FSMContext):
-    file_id = message.document.file_id
-    await state.update_data(schedule=file_id)
-    file = await bot.get_file(file_id)
-    file_path = file.file_path
-    path = rf"schedules\{message.from_user.id}.ics"
-    document = message.document
-    await bot.download_file(file_path=file_path, destination=path)
-    await message.answer('Вы успешно загрузили новое расписание! ✨')
-    await state.clear()
+# @router.message(Settings.schedule)
+# async def schedule_download(message: Message, bot: Bot, state: FSMContext):
+#     file_id = message.document.file_id
+#     await state.update_data(schedule=file_id)
+#     file = await bot.get_file(file_id)
+#     file_path = file.file_path
+#     path = rf"schedules\{message.from_user.id}.ics"
+#     document = message.document
+#     await bot.download_file(file_path=file_path, destination=path)
+#     await message.answer('Вы успешно загрузили новое расписание! ✨')
+#     await state.clear()
 
 
 @router.callback_query(F.data == 'change_homework')
@@ -311,11 +347,11 @@ async def change_headman(callback: CallbackQuery, state: FSMContext):
 @router.message(Settings.mail)
 async def mailing(message: Message, bot: Bot, state: FSMContext):
     await state.update_data(mail=message.text)
-    mail = message.text
+    mail = f'📢 Привет, друзья! 🌟 Это ваш староста, и у меня для вас важные новости! \n\n<blockquote><b>{message.text}</b></blockquote>'
 
     users = await get.get_group_users(message.from_user.id)
     for user in users:
-        await bot.send_message(user, mail)
+        await bot.send_message(user, mail, parse_mode=ParseMode.HTML)
 
 # async def group_kb(callback: CallbackQuery):
 #     all_groups = await get.get_groups()

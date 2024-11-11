@@ -23,6 +23,7 @@ class Group(Base):
     __tablename__ = 'groups'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    faculty: Mapped[int] = mapped_column(BigInteger)
     name: Mapped[str] = mapped_column(String(), default='', unique=True)
     headman: Mapped[int] = mapped_column(BigInteger)
     members: Mapped[int] = mapped_column(Integer(), default=0)

@@ -37,9 +37,9 @@ headman_settings = InlineKeyboardMarkup(
         [
             InlineKeyboardButton(text='Изменить домашнее задание 📚', callback_data='change_homework')
         ],
-        [
-            InlineKeyboardButton(text='Загрузить расписание 📅', callback_data='upload_schedule')
-        ],
+        # [
+        #     InlineKeyboardButton(text='Загрузить расписание 📅', callback_data='upload_schedule')
+        # ],
         [
             InlineKeyboardButton(text='Ссылка на вступление 🔗', callback_data='link')
         ],
@@ -95,3 +95,19 @@ finish_homework_add_and_edit = InlineKeyboardMarkup(
     ]
 )
 
+
+donate = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text='Пожертвовать 💖', url='https://www.donationalerts.com/r/jle4alika')
+        ]
+    ]
+)
+
+news = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text='Подписаться ✅', url='https://t.me/vankavstanka_altgtu_news')
+        ]
+    ]
+)
