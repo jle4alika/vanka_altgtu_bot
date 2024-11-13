@@ -23,7 +23,7 @@ user = InlineKeyboardMarkup(
 user_settings = InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            InlineKeyboardButton(text='Изменить группу  ✏️', callback_data='change_group')
+            InlineKeyboardButton(text='Покинуть группу ❌', callback_data='leave_from_group')
         ]
     ]
 )
@@ -35,17 +35,34 @@ headman_settings = InlineKeyboardMarkup(
             InlineKeyboardButton(text='Передать права старосты 🔄', callback_data='change_headman')
         ],
         [
-            InlineKeyboardButton(text='Изменить домашнее задание 📚', callback_data='change_homework')
+            InlineKeyboardButton(text='Назначить заместителя 🔄', callback_data='change_deputy')
         ],
-        # [
-        #     InlineKeyboardButton(text='Загрузить расписание 📅', callback_data='upload_schedule')
-        # ],
         [
-            InlineKeyboardButton(text='Ссылка на вступление 🔗', callback_data='link')
+            InlineKeyboardButton(text='Изменить название группы ✏️', callback_data='edit_group_name'),
+        ],
+        [
+            InlineKeyboardButton(text='Изменить домашнее задание 📚', callback_data='change_homework')
         ],
         [
             InlineKeyboardButton(text='Рассылка одногруппникам 🚀', callback_data='mailing_list')
+        ],
+        [
+            InlineKeyboardButton(text='Ссылка на вступление 🔗', callback_data='link')
         ]
+    ]
+)
+
+deputy_settings = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text='Изменить домашнее задание 📚', callback_data='change_homework')
+        ],
+        [
+            InlineKeyboardButton(text='Рассылка одногруппникам 🚀', callback_data='mailing_list')
+        ],
+        [
+            InlineKeyboardButton(text='Ссылка на вступление 🔗', callback_data='link')
+        ],
     ]
 )
 
@@ -99,7 +116,7 @@ finish_homework_add_and_edit = InlineKeyboardMarkup(
 donate = InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            InlineKeyboardButton(text='Пожертвовать 💖', url='https://www.donationalerts.com/r/jle4alika')
+            InlineKeyboardButton(text='Поддержать 💖', url='https://www.donationalerts.com/r/jle4alika')
         ]
     ]
 )
@@ -108,6 +125,15 @@ news = InlineKeyboardMarkup(
     inline_keyboard=[
         [
             InlineKeyboardButton(text='Подписаться ✅', url='https://t.me/vankavstanka_altgtu_news')
+        ]
+    ]
+)
+
+
+edit_group_name = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text='Отмена ❌', callback_data='no_edit')
         ]
     ]
 )

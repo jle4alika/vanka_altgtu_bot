@@ -15,7 +15,10 @@ async def set_user(tg_id: int, referrer_id=None) -> None:
             else:
                 session.add(User(tg_id=tg_id))
                 await session.commit()
-
+        else:
+            if referrer_id != None:
+                await session.execute(update(User).where(User.tg_id == tg_id).values(group=referrer_id))
+                await session.commit()
 async def set_user_group(tg_id: int, group: int) -> None:
     async with async_session() as session:
         await session.execute(update(User).where(User.tg_id == tg_id).values(group=group))

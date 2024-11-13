@@ -26,6 +26,12 @@ async def new_headman(tg_id: int, new_headman: int):
         await session.commit()
 
 
+async def new_deputy(tg_id: int, new_deputy: int):
+    async with async_session() as session:
+        await session.execute(update(Group).where(Group.headman == tg_id).values(deputy=new_deputy))
+        await session.commit()
+
+
 async def add_group_member(tg_id: int):
     async with async_session() as session:
         await session.execute(update(Group).where(Group.headman == tg_id).values(members=Group.members + 1))

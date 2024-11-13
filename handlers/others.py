@@ -14,8 +14,6 @@ import keyboards.reply as kbr
 from aiogram.types import FSInputFile
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from icalendar import Calendar
-import datetime
 
 import qrcode
 import re
@@ -23,7 +21,7 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from pyrogram import Client
 from pyrogram.raw.functions.contacts import ResolveUsername
-import random
+
 
 load_dotenv(find_dotenv())
 
@@ -50,10 +48,12 @@ class Reg(StatesGroup):
     group = State()
 
 class Settings(StatesGroup):
+    edit_name = State()
     schedule = State()
     homework_edit = State()
     homework_add_and_edit = State()
     new_headman = State()
+    new_deputy = State()
     mail = State()
 
 
@@ -78,7 +78,8 @@ async def donate(message: Message):
 @router.message(CommandStart())
 async def start(message: Message, bot: Bot):
     user_bool = await get.get_user_bool(message.from_user.id)
-    if not user_bool:
+    user_group = await get.get_user_group(message.from_user.id)
+    if not user_bool or user_group == 0:
         await message.answer(
             '🎓 Привет, студент! Добро пожаловать в наш бот! Здесь ты можешь найти помощь с учебой, задать вопросы и получить советы. Чем могу помочь сегодня? 📚✨')
         start_command = message.text
@@ -86,10 +87,11 @@ async def start(message: Message, bot: Bot):
         referrer_id = str(start_command[7:])
         if str(referrer_id) != '':
             if str(referrer_id) != str(message.from_user.id):
+                await set.set_user(message.from_user.id, int(referrer_id))
+                await add.add_group_member(referrer_id)
                 title = await get.get_group_title(referrer_id)
                 await message.answer(f'Вы успешно вступили в группу {title} 📚✨',
                                      reply_markup=kbr.user_main)
-                await set.set_user(message.from_user.id, int(referrer_id))
                 await bot.send_message(referrer_id, f'В группу вступил новый пользователь @{username}')
             else:
                 await message.answer('<ins>Нельзя</ins> регистрироваться по собственной ссылке!', parse_mode=ParseMode.HTML)
@@ -101,7 +103,8 @@ async def start(message: Message, bot: Bot):
                                  parse_mode=ParseMode.HTML)
     else:
         user = await get.get_group_headman(message.from_user.id)
-        if user == message.from_user.id:
+        deputy = await get.get_group_deputy(message.from_user.id)
+        if user == message.from_user.id or deputy == message.from_user.id:
             await message.answer(
                 '🎓 Привет, студент! Добро пожаловать в наш бот! Здесь ты можешь найти помощь с учебой, задать вопросы и получить советы. Чем могу помочь сегодня? 📚✨',
             reply_markup=kbr.main)
@@ -118,7 +121,7 @@ async def student(callback: CallbackQuery):
         parse_mode=ParseMode.HTML)
     await asyncio.sleep(1)
     await callback.message.answer('🌟<b> Не забудьте подписаться на наш канал с новостями! </b>🌟'
-                                  '\n\nЧтобы всегда быть в курсе последних обновлений и новостей о нашем боте, подписывайтесь на наш канал: @vankavstankaaltgtunews (https://t.me/vankavstanka_altgtu_news).'
+                                  '\n\nЧтобы всегда быть в курсе последних обновлений и новостей о нашем боте, подписывайтесь на наш канал: @vankavstanka_altgtu_news (https://t.me/vankavstanka_altgtu_news).'
                                   '\n\nБудьте первыми, кто узнает о новых функциях и улучшениях! 🚀'
                                   '\n\nСпасибо, что вы с нами! ❤️',
                                   parse_mode=ParseMode.HTML,
@@ -153,13 +156,15 @@ async def headman(callback: CallbackQuery):
 
 @router.callback_query(F.data == 'new_group')
 async def new_group(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer('📝 Введите факультет здесь:')
+    await callback.message.answer('<b>▎Пожалуйста, введите информацию о <ins>вашем факультете</ins></b>',
+                                  parse_mode=ParseMode.HTML)
     await state.set_state(Reg.faculty)
 
 @router.message(Reg.faculty)
 async def faculty(message: Message, state: FSMContext):
     await state.update_data(faculty=message.text)
-    await message.answer('📝 Введите название группы здесь:')
+    await message.answer('<b>▎Пожалуйста, введите название <ins>вашей группы</ins></b>',
+                         parse_mode=ParseMode.HTML)
     await state.set_state(Reg.group)
 
 
@@ -178,14 +183,20 @@ async def group(message: Message, state: FSMContext):
         await set.set_user_group(message.from_user.id, message.from_user.id)
         await add.add_group_member(message.from_user.id)
         await asyncio.sleep(1)
-        link = f'https://t.me/Alina_best_tutor_ever_bot?start={message.from_user.id}'
-        # имя конечного файла
-        filename = f"qr-codes/{message.from_user.id}.jpg"
-        # генерируем qr-код
-        img = qrcode.make(link)
-        # сохраняем img в файл
-        img.save(filename)
-        qr = FSInputFile(rf"qr-codes\{message.from_user.id}.jpg")
+
+        link = f'https://t.me/vanka_altgtu_bot?start={message.from_user.id}'
+
+        if os.path.exists(rf"qr-codes\{message.from_user.id}.jpg"):
+            qr = FSInputFile(f"qr-codes/{message.from_user.id}.jpg")
+
+        else:
+            # имя конечного файла
+            filename = f"qr-codes/{message.from_user.id}.jpg"
+            # генерируем qr-код
+            img = qrcode.make(link)
+            # сохраняем img в файл
+            img.save(filename)
+            qr = FSInputFile(f"qr-codes/{message.from_user.id}.jpg")
         await message.answer_photo( photo=qr,
                                     caption=f'Привет, {message.from_user.first_name}! 👋'
                                             '\n\nНадеюсь, у тебя всё хорошо!'
@@ -202,18 +213,25 @@ async def group(message: Message, state: FSMContext):
                              parse_mode=ParseMode.HTML,
                              reply_markup=kb.news)
     else:
-        await message.answer('Данная группа уже зарегестрированна.\nВведите другое название группы, либо обратитесь к старосте.')
+        await message.answer('Данная группа уже зарегистрированна.\nВведите другое название группы, либо обратитесь к старосте.')
 
 
 @router.message(F.text == 'Настройки ⚙️')
 async def settings(message: Message):
     headman = await get.get_group_headman(message.from_user.id)
-
-    if headman:
+    deputy = await get.get_group_deputy(message.from_user.id)
+    if headman == message.from_user.id:
         await message.answer('Добро пожаловать в Настройки ⚙️! \n'
-                             'Как вы видите, вы можете передать права старосты, поменять домашнее задание и сделать рассылку свои одногруппникам и загрузить расписание',
+                             'Как вы видите, вы можете передать права старосты, назначить заместителя, назначить домашнее задание и сделать рассылку свои одногруппникам',
                              reply_markup=kb.headman_settings)
-
+    elif deputy == message.from_user.id:
+        await message.answer('Добро пожаловать в Настройки ⚙️! \n'
+                             'Как вы видите, вы можете назначить домашнее задание и сделать рассылку свои одногруппникам',
+                             reply_markup=kb.deputy_settings)
+    else:
+        await message.answer('Добро пожаловать в Настройки ⚙️! \n'
+                             'Как вы видите, вы можете покинуть группу',
+                             reply_markup=kb.user_settings)
 
 
 # @router.callback_query(F.data  == 'upload_schedule')
@@ -235,6 +253,33 @@ async def settings(message: Message):
 #     await bot.download_file(file_path=file_path, destination=path)
 #     await message.answer('Вы успешно загрузили новое расписание! ✨')
 #     await state.clear()
+
+
+@router.callback_query(F.data == 'leave_from_group')
+async def leave_from_group(callback: CallbackQuery):
+    await set.set_user_group(callback.from_user.id, 0)
+    await callback.answer('Вы успешно покинули группу')
+
+
+@router.callback_query(F.data == 'edit_group_name')
+async def leave_from_group(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(Settings.edit_name)
+    await callback.message.answer('<b>▎Пожалуйста, введите новое название <ins>вашей группы</ins></b>',
+                                  parse_mode=ParseMode.HTML,
+                                  reply_markup=kb.edit_group_name)
+
+@router.message(Settings.edit_name)
+async def edit_group(message: Message, state: FSMContext):
+    data = message.text
+    await state.update_data(edit_name=data)
+    await message.answer(f'Вы успешно изменили название группы на {data}')
+    await state.clear()
+
+
+@router.callback_query(F.data == 'no_edit')
+async def no_edit(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer('Вы успешно отменили изменение названия группы')
 
 
 @router.callback_query(F.data == 'change_homework')
@@ -295,23 +340,73 @@ async def change_headman(callback: CallbackQuery, state: FSMContext):
 @router.message(Settings.new_headman)
 async def get_new_homework(message: Message, state: FSMContext, bot: Bot):
     mention = re.search(r'@(\w+)', message.text)
-    print(mention)
+
     await state.update_data(new_headman=message.text)
+
     if mention:
         username = mention.group(1)
-        print(username)
         headman = await resolve_username_to_user_id(username)
-        print(headman)
 
-        if headman != message.from_user.id:
+        user = await get.get_user_bool(headman)
+        old_headman = await get.get_user_group(headman)
+        print(headman)
+        print(old_headman)
+        print(message.from_user.id)
+
+        if headman != message.from_user.id and old_headman == message.from_user.id:
             await add.new_headman(message.from_user.id, headman)
             await message.answer(f'Вы успешно передали права старосты - @{username}!', reply_markup=kbr.user_main)
             await bot.send_message(headman, 'Вам передали права старосты в группе!', reply_markup=kbr.main)
 
+        elif not user:
+            await message.answer('Данный пользователь не зарегистрирован в боте.')
+
+        elif headman == message.from_user.id:
+            await message.answer('Вы не можете себя снова назначить старостой')
+
+        elif old_headman != message.from_user.id:
+            await message.answer('Данный пользователь не находится в вашей группе.')
+
+        await state.clear()
+
+
+@router.callback_query(F.data == 'change_deputy')
+async def change_deputy(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer('Введите юз нового старосты:')
+    await state.set_state(Settings.new_deputy)
+
+
+@router.message(Settings.new_deputy)
+async def get_new_deputy(message: Message, state: FSMContext, bot: Bot):
+    mention = re.search(r'@(\w+)', message.text)
+
+    await state.update_data(new_deputy=message.text)
+
+    if mention:
+        username = mention.group(1)
+        deputy = await resolve_username_to_user_id(username)
+
+        user = await get.get_user_bool(deputy)
+        headman = await get.get_user_group(deputy)
+        if deputy != message.from_user.id and headman == message.from_user.id:
+            await add.new_deputy(message.from_user.id, deputy)
+            await message.answer(f'Вы успешно передали права заместителя старосты - @{username}!')
+            await bot.send_message(deputy, 'Вам передали права заместителя старосты в группе!', reply_markup=kbr.main)
+
+        elif not user:
+            await message.answer('Данный пользователь не зарегистрирован в боте.')
+
+        elif deputy == message.from_user.id:
+            await message.answer('Вы не можете назначить себя заместителем старосты.')
+
+        elif headman != message.from_user.id:
+            await message.answer('Данный пользователь не находится в вашей группе.')
+
+        await state.clear()
 
 @router.callback_query(F.data == 'link')
 async def change_headman(callback: CallbackQuery):
-    link = f'https://t.me/Alina_best_tutor_ever_bot?start={callback.from_user.id}'
+    link = f'https://t.me/vanka_altgtu_bot?start={callback.from_user.id}'
 
     if os.path.exists(rf"qr-codes\{callback.from_user.id}.jpg"):
         qr = FSInputFile(f"qr-codes/{callback.from_user.id}.jpg")
@@ -329,7 +424,7 @@ async def change_headman(callback: CallbackQuery):
         img = qrcode.make(link)
         # сохраняем img в файл
         img.save(filename)
-        qr = FSInputFile(rf"qr-codes\{callback.from_user.id}.jpg")
+        qr = FSInputFile(f"qr-codes/{callback.from_user.id}.jpg")
         await callback.message.answer_photo(photo=qr,
                                             caption=f'Привет, {callback.from_user.first_name}! 👋'
                                                     '\n\nНадеюсь, у тебя всё хорошо!'

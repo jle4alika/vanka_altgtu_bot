@@ -2,6 +2,9 @@ import datetime
 import os
 import time
 
+from playwright.async_api import async_playwright
+import asyncio
+
 from aiogram import Router, Bot, F
 import locale
 from aiogram.types import Message, CallbackQuery
@@ -10,15 +13,16 @@ import database.requests.get as get
 import database.requests.add as add
 import keyboards.inline as kb
 from aiogram.filters.command import Command
-
+# from xvfbwrapper import Xvfb
 from aiogram.enums import ParseMode
-
-from selenium import webdriver
 from bs4 import BeautifulSoup
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver import ChromeOptions
-from selenium.webdriver.common.keys import Keys
+
+from xvfbwrapper import Xvfb
+
+# create fake X server
+
+vdisplay = Xvfb()
+vdisplay.start()
 
 
 router = Router()
@@ -48,75 +52,122 @@ async def schedule(message: Message):
 @router.callback_query(F.data == 'today')
 async def schedule_today(callback: CallbackQuery):
     title = await get.get_group_title(callback.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
+        await asyncio.sleep(1)
+
+        response = await page.content()
+
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # locale.setlocale(locale.LC_ALL, 'ru_RU')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        schedule = datetime.datetime.now().strftime("%d.%m.%y %A").title()
+        schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
+
+        for date in dates:
+            data = str(date.find('h2').text)
+            print(data)
+            data = datetime.datetime.strptime(data, "%d.%m.%y %A")
+
+            # print(data.__class__, data)
+            # print(schedule.__class__, schedule)
+            # print(data == schedule)
+
+            if data == schedule:
+                print('found schedule')
+                xz = date.find_all('div', class_='list-group-item')
+                text = f'📌 {datetime.datetime.now().strftime("%d.%m.%y %A").title()}\n\n'
+                for item in xz:
+                    date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                    # print(" ".join(item.text.split()).split(' ', 1)[1])
+                    date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                    lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                    # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                    text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+                await callback.message.answer(text)
+        await browser.close()
+        
+
+
+    # title = await get.get_group_title(callback.from_user.id)
+    # url = 'https://www.altstu.ru/m/s/'
+    # service = Service(executable_path=ChromeDriverManager().install())
+    # options = ChromeOptions()
+    #
     # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
-
-    browser = webdriver.Chrome(service=service, options=options)
-
-    browser.get(url=url)
-    print('Get the full page source')
-
-    # Get the full page source
-    response = browser.page_source
-
-
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
-
-    time.sleep(1)
-
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
-
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    schedule = datetime.datetime.now().strftime("%d.%m.%y %A").title()
-    schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-
-    for date in dates:
-        data = str(date.find('h2').text)
-        data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-        # print(data.__class__, data)
-        # print(schedule.__class__, schedule)
-        # print(data == schedule)
-
-        if data == schedule:
-            print('found schedule')
-            xz = date.find_all('div', class_='list-group-item')
-            text = f'📌 {datetime.datetime.now().strftime("%d.%m.%y %A").title()}\n\n'
-            for item in xz:
-                date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                # print(" ".join(item.text.split()).split(' ', 1)[1])
-                date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-            await callback.message.answer(text)
-            break
+    # options.headless = True
+    # options.add_experimental_option(
+    #     "prefs", {
+    #         # block image loading
+    #         "profile.managed_default_content_settings.images": 2,
+    #     }
+    # )
+    #
+    # browser = webdriver.Chrome(service=service, options=options)
+    #
+    # browser.get(url=url)
+    #
+    # # Get the full page source
+    # response = browser.page_source
+    #
+    #
+    # text = browser.find_element(by='id', value='schedule_input')
+    # text.send_keys(f'{title}', Keys.ENTER)
+    #
+    # time.sleep(1)
+    #
+    # for handle in browser.window_handles:
+    #     browser.switch_to.window(handle)
+    #
+    # response = browser.page_source
+    # browser.quit()
+    # soup = BeautifulSoup(response, "lxml")
+    # # print(soup)
+    #
+    # locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+    # # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+    # schedule = datetime.datetime.now().strftime("%d.%m.%y %A").title()
+    # schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+    # dates = soup.find_all('div', class_='block-index')
+    # # print(dates)
+    #
+    # for date in dates:
+    #     data = str(date.find('h2').text)
+    #     data = datetime.datetime.strptime(data, "%d.%m.%y %A")
+    #
+    #     # print(data.__class__, data)
+    #     # print(schedule.__class__, schedule)
+    #     # print(data == schedule)
+    #
+    #     if data == schedule:
+    #         print('found schedule')
+    #         xz = date.find_all('div', class_='list-group-item')
+    #         text = f'📌 {datetime.datetime.now().strftime("%d.%m.%y %A").title()}\n\n'
+    #         for item in xz:
+    #             date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+    #             # print(" ".join(item.text.split()).split(' ', 1)[1])
+    #             date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+    #             lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+    #             # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+    #             text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+    #         await callback.message.answer(text)
 
     # headman = await get.get_group_headman(callback.from_user.id)
     #
     # date_start = []
     # lessons = []
     # date_finish = []
-    # locale.setlocale(locale.LC_ALL, '')
+    # locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
     # schedule = f'{datetime.datetime.now().strftime("%A %Y/%m/%d").title()} \n'
     #
     # try:
@@ -152,75 +203,54 @@ async def schedule_today(callback: CallbackQuery):
 @router.callback_query(F.data == 'tomorrow')
 async def schedule_tomorrow(callback: CallbackQuery):
     title = await get.get_group_title(callback.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(channel='chrome', headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
-    # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
+        await asyncio.sleep(1)
 
-    browser = webdriver.Chrome(service=service, options=options)
+        response = await page.content()
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
 
-    browser.get(url=url)
-    print('Get the full page source')
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
+        schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
 
-    # Get the full page source
-    response = browser.page_source
+        for date in dates:
+            data = str(date.find('h2').text)
+            data = datetime.datetime.strptime(data, "%d.%m.%y %A")
 
+            # print(data.__class__, data)
+            # print(schedule.__class__, schedule)
+            # print(data == schedule)
 
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
+            if data == schedule:
+                print('found schedule')
+                xz = date.find_all('div', class_='list-group-item')
+                text = f'📌 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()}\n\n'
+                for item in xz:
+                    date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                    # print(" ".join(item.text.split()).split(' ', 1)[1])
+                    date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                    lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                    # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                    text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+                await callback.message.answer(text)
 
-    time.sleep(1)
-
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
-
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
-    schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-
-    for date in dates:
-        data = str(date.find('h2').text)
-        data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-        # print(data.__class__, data)
-        # print(schedule.__class__, schedule)
-        # print(data == schedule)
-
-        if data == schedule:
-            print('found schedule')
-            xz = date.find_all('div', class_='list-group-item')
-            text = f'📌 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()}\n\n'
-            for item in xz:
-                date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                # print(" ".join(item.text.split()).split(' ', 1)[1])
-                date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-            await callback.message.answer(text)
-            break
 
     # headman = await get.get_group_headman(callback.from_user.id)
     #
     # date_start = []
     # lessons = []
     # date_finish = []
-    # locale.setlocale(locale.LC_ALL, '')
+    # locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
     # schedule = f'{(datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%A %Y/%m/%d").title()} \n'
     # tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     # try:
@@ -257,81 +287,60 @@ async def schedule_tomorrow(callback: CallbackQuery):
 @router.callback_query(F.data == 'week')
 async def schedule_tomorrow(callback: CallbackQuery):
     title = await get.get_group_title(callback.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(channel='chrome', headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
-    # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
+        await asyncio.sleep(1)
 
-    browser = webdriver.Chrome(service=service, options=options)
+        response = await page.content()
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
 
-    browser.get(url=url)
-    print('Get the full page source')
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        # schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
+        # schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
+        #
+        # for date in dates:
+        #     data = str(date.find('h2').text)
+        #     data = datetime.datetime.strptime(data, "%d.%m.%y %A")
 
-    # Get the full page source
-    response = browser.page_source
+            # print(data.__class__, data)
+            # print(schedule.__class__, schedule)
+            # print(data == schedule)
+        try:
+            text = ''
+            for i in range(0, 7):
+                text += f'<b>\n📌 {(datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()}\n</b>'
+                schedule = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()
+                schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+                for date in dates:
+                    data = str(date.find('h2').text)
+                    data = datetime.datetime.strptime(data, "%d.%m.%y %A")
+                    if data == schedule:
+                        print('found schedule')
+                        xz = date.find_all('div', class_='list-group-item')
 
-
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
-
-    time.sleep(1)
-
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
-
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    # schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
-    # schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-    #
-    # for date in dates:
-    #     data = str(date.find('h2').text)
-    #     data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-        # print(data.__class__, data)
-        # print(schedule.__class__, schedule)
-        # print(data == schedule)
-    try:
-        text = ''
-        for i in range(0, 7):
-            text += f'<b>\n📌 {(datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()}\n</b>'
-            schedule = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()
-            schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-            for date in dates:
-                data = str(date.find('h2').text)
-                data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-                if data == schedule:
-                    print('found schedule')
-                    xz = date.find_all('div', class_='list-group-item')
-
-                    for item in xz:
-                        date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                        # print(" ".join(item.text.split()).split(' ', 1)[1])
-                        date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                        lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                        # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                        text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-    finally:
-        await callback.message.answer(text,
-                                      parse_mode=ParseMode.HTML)
+                        for item in xz:
+                            date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                            # print(" ".join(item.text.split()).split(' ', 1)[1])
+                            date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                            lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                            # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                            text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+        finally:
+            await callback.message.answer(text,
+                                          parse_mode=ParseMode.HTML)
     # headman = await get.get_group_headman(callback.from_user.id)
     #
     # schedule = ''
-    # locale.setlocale(locale.LC_ALL, '')
+    # locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
     #
     # try:
     #     g = open(rf"schedules\{headman}.ics", 'rb')
@@ -374,206 +383,147 @@ async def schedule_tomorrow(callback: CallbackQuery):
 @router.message(Command('today'))
 async def schedule_today(message: Message):
     title = await get.get_group_title(message.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(channel='chrome', headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
-    # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
+        await asyncio.sleep(1)
 
-    browser = webdriver.Chrome(service=service, options=options)
+        response = await page.content()
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
 
-    browser.get(url=url)
-    print('Get the full page source')
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        schedule = datetime.datetime.now().strftime("%d.%m.%y %A").title()
+        schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
 
-    # Get the full page source
-    response = browser.page_source
+        for date in dates:
+            data = str(date.find('h2').text)
+            data = datetime.datetime.strptime(data, "%d.%m.%y %A")
 
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
+            # print(data.__class__, data)
+            # print(schedule.__class__, schedule)
+            # print(data == schedule)
 
-    time.sleep(1)
+            if data == schedule:
+                print('found schedule')
+                xz = date.find_all('div', class_='list-group-item')
+                text = f'📌 {datetime.datetime.now().strftime("%d.%m.%y %A").title()}\n\n'
+                for item in xz:
+                    date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                    # print(" ".join(item.text.split()).split(' ', 1)[1])
+                    date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                    lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                    # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                    text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+                await message.answer(text)
 
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
-
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    schedule = datetime.datetime.now().strftime("%d.%m.%y %A").title()
-    schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-
-    for date in dates:
-        data = str(date.find('h2').text)
-        data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-        # print(data.__class__, data)
-        # print(schedule.__class__, schedule)
-        # print(data == schedule)
-
-        if data == schedule:
-            print('found schedule')
-            xz = date.find_all('div', class_='list-group-item')
-            text = f'📌 {datetime.datetime.now().strftime("%d.%m.%y %A").title()}\n\n'
-            for item in xz:
-                date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                # print(" ".join(item.text.split()).split(' ', 1)[1])
-                date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-            await message.answer(text)
-            break
 
 
 @router.message(Command('tomorrow'))
 async def schedule_tomorrow(message: Message):
     title = await get.get_group_title(message.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
 
-    # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(channel='chrome', headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
-    browser = webdriver.Chrome(service=service, options=options)
+        await asyncio.sleep(1)
 
-    browser.get(url=url)
-    print('Get the full page source')
+        response = await page.content()
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
 
-    # Get the full page source
-    response = browser.page_source
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
+        schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
 
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
+        for date in dates:
+            data = str(date.find('h2').text)
+            data = datetime.datetime.strptime(data, "%d.%m.%y %A")
 
-    # time.sleep(1)
+            # print(data.__class__, data)
+            # print(schedule.__class__, schedule)
+            # print(data == schedule)
 
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
+            if data == schedule:
+                print('found schedule')
+                xz = date.find_all('div', class_='list-group-item')
+                text = f'📌 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()}\n\n'
+                for item in xz:
+                    date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                    # print(" ".join(item.text.split()).split(' ', 1)[1])
+                    date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                    lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                    # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                    text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+                await message.answer(text)
 
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
-    schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-
-    for date in dates:
-        data = str(date.find('h2').text)
-        data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-        # print(data.__class__, data)
-        # print(schedule.__class__, schedule)
-        # print(data == schedule)
-
-        if data == schedule:
-            print('found schedule')
-            xz = date.find_all('div', class_='list-group-item')
-            text = f'📌 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()}\n\n'
-            for item in xz:
-                date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                # print(" ".join(item.text.split()).split(' ', 1)[1])
-                date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-            await message.answer(text)
-            break
 
 @router.message(Command('week'))
 async def schedule_tomorrow(message: Message):
     title = await get.get_group_title(message.from_user.id)
-    url = 'https://www.altstu.ru/m/s/'
-    service = Service(executable_path=ChromeDriverManager().install())
-    options = ChromeOptions()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(channel='chrome', headless=True)
+        page = await browser.new_page()
+        await page.goto('https://www.altstu.ru/m/s/')
+        await page.get_by_placeholder('Группа').fill(f'{title}')
+        await page.keyboard.press('Enter')
 
-    # options.add_argument("--no-sandbox")
-    options.headless = True
-    options.add_experimental_option(
-        "prefs", {
-            # block image loading
-            "profile.managed_default_content_settings.images": 2,
-        }
-    )
+        await asyncio.sleep(1)
 
-    browser = webdriver.Chrome(service=service, options=options)
+        response = await page.content()
+        soup = BeautifulSoup(response, "lxml")
+        # print(soup)
 
-    browser.get(url=url)
-    print('Get the full page source')
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
+        # schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
+        # schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+        dates = soup.find_all('div', class_='block-index')
+        # print(dates)
+        #
+        # for date in dates:
+        #     data = str(date.find('h2').text)
+        #     data = datetime.datetime.strptime(data, "%d.%m.%y %A")
 
-    # Get the full page source
-    response = browser.page_source
+        # print(data.__class__, data)
+        # print(schedule.__class__, schedule)
+        # print(data == schedule)
+        try:
+            text = ''
+            for i in range(0, 7):
+                text += f'<b>\n📌 {(datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()}\n</b>'
+                schedule = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()
+                schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
+                for date in dates:
+                    data = str(date.find('h2').text)
+                    data = datetime.datetime.strptime(data, "%d.%m.%y %A")
+                    if data == schedule:
+                        print('found schedule')
+                        xz = date.find_all('div', class_='list-group-item')
 
-    text = browser.find_element(by='id', value='schedule_input')
-    text.send_keys(f'{title}', Keys.ENTER)
-
-    time.sleep(1)
-
-    for handle in browser.window_handles:
-        browser.switch_to.window(handle)
-
-    response = browser.page_source
-    soup = BeautifulSoup(response, "lxml")
-    # print(soup)
-
-    locale.setlocale(locale.LC_ALL, '')
-    # schedule = f'{datetime.datetime.now().strftime("%Y/%m/%d %A").title()}'
-    # schedule = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%y %A").title()
-    # schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-    dates = soup.find_all('div', class_='block-index')
-    # print(dates)
-    #
-    # for date in dates:
-    #     data = str(date.find('h2').text)
-    #     data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-
-    # print(data.__class__, data)
-    # print(schedule.__class__, schedule)
-    # print(data == schedule)
-    try:
-        text = ''
-        for i in range(0, 7):
-            text += f'<b>\n📌 {(datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()}\n</b>'
-            schedule = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%d.%m.%y %A").title()
-            schedule = datetime.datetime.strptime(schedule, "%d.%m.%y %A")
-            for date in dates:
-                data = str(date.find('h2').text)
-                data = datetime.datetime.strptime(data, "%d.%m.%y %A")
-                if data == schedule:
-                    print('found schedule')
-                    xz = date.find_all('div', class_='list-group-item')
-
-                    for item in xz:
-                        date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
-                        # print(" ".join(item.text.split()).split(' ', 1)[1])
-                        date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
-                        lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
-                        # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
-                        text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
-    finally:
-        await message.answer(text,
-                                      parse_mode=ParseMode.HTML)
+                        for item in xz:
+                            date_start = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[0]
+                            # print(" ".join(item.text.split()).split(' ', 1)[1])
+                            date_finish = " ".join(item.text.split()).split((' - '))[0].split(' ', 1)[0].split('-')[1]
+                            lesson = f'{" ".join(item.text.split()).split(" ", 1)[1]}'
+                            # print(f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n')
+                            text += f'\n🌅 Начало пары: {date_start} \n' + f'📓 {lesson} \n' + f'🌃 Конец пары: {date_finish} \n'
+        finally:
+            await message.answer(text,
+                                 parse_mode=ParseMode.HTML)
 
 

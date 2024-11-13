@@ -26,6 +26,7 @@ class Group(Base):
     faculty: Mapped[int] = mapped_column(BigInteger)
     name: Mapped[str] = mapped_column(String(), default='', unique=True)
     headman: Mapped[int] = mapped_column(BigInteger)
+    deputy: Mapped[int] = mapped_column(BigInteger, default=0)
     members: Mapped[int] = mapped_column(Integer(), default=0)
     homework: Mapped[str] = mapped_column(String(), default='')
 

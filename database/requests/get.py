@@ -2,8 +2,6 @@ from database.models import async_session
 from database.models import User, Group
 from sqlalchemy import select, update, text, delete
 
-import datetime
-
 async def get_user_bool(tg_id: int):
     async with async_session() as session:
         query = await session.execute(select(User).where(User.tg_id == tg_id))
@@ -24,11 +22,18 @@ async def get_group_headman(tg_id: int):
         return query
 
 
-async def get_all_names(tg_id: int):
+async def get_group_deputy(tg_id: int):
     async with async_session() as session:
-        query = await session.scalars(select(User.name).where(User.tg_id != tg_id))
-        result = query.fetchall()
-        return result
+        group = await session.scalar(select(User.group).where(User.tg_id == tg_id))
+        query = await session.scalar(select(Group.deputy).where(Group.headman == group))
+        return query
+
+
+# async def get_all_names(tg_id: int):
+#     async with async_session() as session:
+#         query = await session.scalars(select(User.name).where(User.tg_id != tg_id))
+#         result = query.fetchall()
+#         return result
 
 async def get_homework(tg_id: int):
     async with async_session() as session:
@@ -50,7 +55,8 @@ async def get_groups():
 
 async def get_group_title(tg_id: int):
     async with async_session() as session:
-        query = await session.scalar(select(Group.name).where(Group.headman == tg_id))
+        group = await session.scalar(select(User.group).where(User.tg_id == tg_id))
+        query = await session.scalar(select(Group.name).where(Group.headman == group))
         return query
 
 
@@ -66,3 +72,8 @@ async def get_group_users(group: int):
         query = await session.scalars(select(User.tg_id).where(User.group == group))
         result = query.fetchall()
         return result
+
+async def get_user_group(tg_id: int):
+    async with async_session() as session:
+        group = await session.scalar(select(User.group).where(User.tg_id == tg_id))
+        return group
