@@ -111,7 +111,7 @@ python main.py
 
 ## Авторы
 
-- [@jle4alika](https://github.com/jle4alika) — основной разработчик.
+- [@jle4alika](https://github.com/jle4alika) — основной и единственный разработчик.
 
 
 
